@@ -2,7 +2,7 @@
 
 Sign AI agent instruction files with [Sigstore](https://sigstore.dev) keyless attestation using [nono](https://github.com/always-further/nono).
 
-Produces `.bundle` sidecar files containing DSSE envelopes with in-toto statements. Bundles include a Fulcio certificate (binding the GitHub Actions OIDC identity to the signature) and a Rekor transparency log inclusion proof.
+Produces Sigstore bundles containing DSSE envelopes with in-toto statements. When multiple files are specified, they are signed together into a single multi-subject bundle (`.nono-trust.bundle`) where one signature covers all files. Bundles include a Fulcio certificate (binding the GitHub Actions OIDC identity to the signature) and a Rekor transparency log inclusion proof.
 
 ## Usage
 
@@ -38,12 +38,25 @@ This signs all instruction files matching nono's default patterns, commits the `
     upload-artifacts: "true"
 ```
 
-### Sign specific files
+### Sign specific files (multi-subject bundle)
+
+When you specify multiple files, they are signed together into a single `.nono-trust.bundle`. Any modification to any file invalidates the entire bundle.
+
+```yaml
+- uses: always-further/nono-skill-sign-action@v1
+  with:
+    files: "SKILLS.md CLAUDE.md config/settings.json"
+```
+
+### Sign files separately (per-file bundles)
+
+For backwards compatibility or when you want independent verification, use `per-file: true` to create separate `<file>.bundle` sidecars for each file.
 
 ```yaml
 - uses: always-further/nono-skill-sign-action@v1
   with:
     files: "SKILLS.md CLAUDE.md"
+    per-file: "true"
 ```
 
 ### Pin a specific nono version
@@ -67,9 +80,10 @@ This signs all instruction files matching nono's default patterns, commits the `
 | Input | Default | Description |
 |-------|---------|-------------|
 | `version` | `latest` | nono CLI version to install |
-| `files` | _(empty)_ | Files/globs to sign. Empty = `--all` (matches instruction patterns) |
-| `commit` | `true` | Commit `.bundle` files back to the repository |
-| `upload-artifacts` | `false` | Upload `.bundle` files as workflow artifacts |
+| `files` | _(empty)_ | Whitespace-separated list of files to sign. Empty = `--all` (matches instruction patterns) |
+| `per-file` | `false` | Sign each file separately with its own `<file>.bundle` instead of a single multi-subject `.nono-trust.bundle` |
+| `commit` | `true` | Commit bundle files back to the repository |
+| `upload-artifacts` | `false` | Upload bundle files as workflow artifacts |
 | `verify` | `true` | Run verification after signing |
 | `trust-policy` | _(empty)_ | Path to `trust-policy.json` for verification |
 | `working-directory` | `.` | Working directory for signing |
@@ -82,7 +96,16 @@ This signs all instruction files matching nono's default patterns, commits the `
 3. GitHub Actions OIDC provides the identity token automatically
 4. Fulcio issues a short-lived certificate binding the OIDC claims (repository, workflow, ref) to an ephemeral signing key
 5. The signature is submitted to Rekor for transparency logging
-6. The resulting `.bundle` contains everything needed for offline verification
+6. The resulting bundle contains everything needed for offline verification
+
+### Multi-Subject vs Per-File Bundles
+
+| Mode | Bundle Output | Use Case |
+|------|---------------|----------|
+| Multi-subject (default) | `.nono-trust.bundle` | Sign related files together. One signature covers all files. Any change invalidates the bundle. |
+| Per-file (`per-file: true`) | `<file>.bundle` for each | Independent signatures. Files can be updated separately. |
+
+Multi-subject bundles are recommended for most use cases — they ensure atomic verification of related instruction files and their companion artifacts.
 
 ## Requirements
 
@@ -135,6 +158,18 @@ nono run --profile claude-code -- claude
 | `commit: true` (default) | Bundles live alongside files in version control. Consumers get them on `git clone`. |
 | `upload-artifacts: true` | Bundles available as downloadable workflow artifacts. Useful for release pipelines. |
 | Both | Commit for development, artifacts for release automation. |
+
+## Companion Artifacts
+
+SKILL files often reference companion artifacts (scripts, configs, data files). Use multi-subject signing to attest them together:
+
+```yaml
+- uses: always-further/nono-skill-sign-action@v1
+  with:
+    files: "SKILLS.md lib/helper.py config/settings.json"
+```
+
+This produces a single `.nono-trust.bundle` that attests all three files. If any file is modified, the entire bundle becomes invalid, ensuring the agent only receives a consistent, verified set of files.
 
 ## License
 

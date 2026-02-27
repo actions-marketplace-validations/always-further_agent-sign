@@ -13,16 +13,24 @@ inputs:
     default: "latest"
   files:
     description: >
-      Whitespace-separated list of files or globs to sign.
+      Whitespace-separated list of files to sign.
       If empty, uses --all to sign all instruction files matching trust policy patterns.
+      When multiple files are specified, they are signed together into a single
+      multi-subject bundle (.nono-trust.bundle) for atomic verification.
     required: false
     default: ""
+  per-file:
+    description: >
+      Sign each file separately with its own sidecar bundle (<file>.bundle) instead
+      of combining into a single multi-subject bundle. Default is false (multi-subject).
+    required: false
+    default: "false"
   commit:
-    description: "Commit .bundle sidecar files back to the repository."
+    description: "Commit bundle files back to the repository."
     required: false
     default: "true"
   upload-artifacts:
-    description: "Upload .bundle files as workflow artifacts."
+    description: "Upload bundle files as workflow artifacts."
     required: false
     default: "false"
   verify:
@@ -38,7 +46,7 @@ inputs:
     required: false
     default: "."
   commit-message:
-    description: "Commit message for bundle sidecar commits."
+    description: "Commit message for bundle commits."
     required: false
     default: "chore: update instruction file attestation bundles [skip ci]"
 
@@ -103,26 +111,47 @@ runs:
       shell: bash
       env:
         INPUT_FILES: ${{ inputs.files }}
+        INPUT_PER_FILE: ${{ inputs.per-file }}
         INPUT_WORKING_DIR: ${{ inputs.working-directory }}
       run: |
         cd "${INPUT_WORKING_DIR}"
 
         if [ -z "${INPUT_FILES}" ]; then
+          # No files specified: use --all (discovers and signs all instruction files)
           echo "Signing all instruction files (--keyless --all)"
           nono trust sign --keyless --all
-        else
+        elif [ "${INPUT_PER_FILE}" = "true" ]; then
+          # Per-file mode: sign each file separately
           for file in ${INPUT_FILES}; do
             if [ -f "${file}" ]; then
-              echo "Signing ${file}"
+              echo "Signing ${file} (per-file bundle)"
               nono trust sign --keyless "${file}"
             else
               echo "::warning::File not found: ${file}"
             fi
           done
+        else
+          # Multi-subject mode (default): sign all files together
+          FILES_TO_SIGN=""
+          for file in ${INPUT_FILES}; do
+            if [ -f "${file}" ]; then
+              FILES_TO_SIGN="${FILES_TO_SIGN} ${file}"
+            else
+              echo "::warning::File not found: ${file}"
+            fi
+          done
+
+          if [ -n "${FILES_TO_SIGN}" ]; then
+            echo "Signing files as multi-subject bundle:${FILES_TO_SIGN}"
+            nono trust sign --keyless ${FILES_TO_SIGN}
+          else
+            echo "::error::No valid files to sign"
+            exit 1
+          fi
         fi
 
         # Collect generated bundles for downstream steps
-        BUNDLES="$(find . -name '*.bundle' -newer . -o -name '*.bundle' | sort -u)"
+        BUNDLES="$(find . -name '*.bundle' -type f | sort -u)"
         {
           echo "bundles<<NONO_EOF"
           echo "${BUNDLES}"
@@ -159,7 +188,8 @@ runs:
         git config user.name "github-actions[bot]"
         git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-        git add -A '*.bundle'
+        # Stage both per-file bundles and multi-subject bundles
+        git add -A '*.bundle' '.nono-trust.bundle' 2>/dev/null || true
 
         if git diff --cached --quiet; then
           echo "No bundle changes to commit."
@@ -173,5 +203,7 @@ runs:
       uses: actions/upload-artifact@v4
       with:
         name: instruction-file-bundles
-        path: "${{ inputs.working-directory }}/**/*.bundle"
+        path: |
+          ${{ inputs.working-directory }}/**/*.bundle
+          ${{ inputs.working-directory }}/.nono-trust.bundle
         if-no-files-found: warn
