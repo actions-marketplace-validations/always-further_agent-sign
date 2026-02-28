@@ -4,7 +4,7 @@
 
 <p align="center">
   <strong>Cryptographic provenance for AI agent instruction files</strong><br>
-  Sign SKILLS.md, AGENT.md etc and their scripts, configs with <a href="https://sigstore.dev">Sigstore</a> keyless attestation — no keys to manage, no secrets to rotate.
+  Sign SKILLS.md, AGENT.md etc and their scripts, configs with <a href="https://sigstore.dev">Sigstore</a> and <a href="https://nono.sh">Nono</a> keyless attestation — no keys to manage, no secrets to rotate and protect your agents from prompt injections!
 </p>
 
 <p align="center">
