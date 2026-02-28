@@ -30,7 +30,9 @@ name: Sign instruction files
 on:
   push:
     branches: [main]
-    paths: ['SKILLS*', 'CLAUDE*', 'AGENT*', '.claude/**/*.md']
+    paths:
+    - 'SKILL.md'
+    - 'scripts/some-script.py'
 
 permissions:
   id-token: write
