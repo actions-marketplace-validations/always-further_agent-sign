@@ -1,4 +1,4 @@
-name: "nono-skill-sign-action"
+name: "nono-sigstore-action"
 description: "Sign AI agent instruction files (SKILLS.md, CLAUDE.md, AGENT.MD) with Sigstore keyless attestation"
 author: "Phase Security"
 
