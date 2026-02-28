@@ -166,6 +166,96 @@ Or enforce at runtime — nono's pre-exec scan verifies all instruction files be
 nono run --profile claude-code -- claude
 ```
 
+## Source to Runtime Attestation
+
+This action is the **source** half of nono's attestation pipeline. The **runtime** half happens when an agent is launched through `nono run`. Together they form an unbroken cryptographic chain from CI to execution. For full technical details, see [Signing and Attestation Internals](https://nono.sh/docs/cli/internals/signing).
+
+### The attestation stack
+
+Each signed file produces a three-layer cryptographic artifact:
+
+```
+Sigstore Bundle (v0.3)
+  └── Verification Material
+  │     ├── Fulcio certificate chain (keyless) or public key hint (keyed)
+  │     └── Rekor transparency log inclusion proof
+  └── DSSE Envelope
+        ├── payloadType: "application/vnd.in-toto+json"
+        ├── payload: in-toto v1 statement
+        │     ├── subject: filename + SHA-256 digest
+        │     ├── predicateType: "https://nono.sh/attestation/instruction-file/v1"
+        │     └── predicate: signer identity (OIDC issuer, repo, workflow ref)
+        └── signatures: ECDSA P-256 over the Pre-Authentication Encoding
+```
+
+For keyless signing (the default in CI), the signer identity is extracted from the GitHub Actions OIDC token and embedded in a short-lived Fulcio certificate. The certificate binds the OIDC claims -- repository, workflow file, branch ref -- to an ephemeral signing key. The signature is then logged in Rekor, providing a timestamp proof that the signature was created while the certificate was valid.
+
+### What happens at runtime
+
+When an agent is launched through nono, the sandbox enforces attestation before the agent can read any instruction file:
+
+```
+nono run -- claude
+  │
+  ├── Pre-exec scan
+  │     ├── Locate all files matching trust policy instruction_patterns
+  │     ├── Verify trust-policy.json's own bundle signature
+  │     ├── For each instruction file:
+  │     │     ├── Find .bundle sidecar
+  │     │     ├── Validate Fulcio certificate chain
+  │     │     ├── Confirm Rekor timestamp falls within certificate lifespan
+  │     │     ├── Verify ECDSA signature over DSSE PAE
+  │     │     ├── Match OIDC claims against trust policy publishers
+  │     │     ├── Check SHA-256 digest against blocklist
+  │     │     └── Compute file digest and compare to in-toto subject
+  │     └── If any file fails with enforcement: "deny" → sandbox refuses to start
+  │
+  ├── Runtime interception (Linux)
+  │     ├── seccomp-notify intercepts openat/openat2 syscalls
+  │     ├── When the agent opens an instruction file:
+  │     │     ├── Supervisor reads and verifies the file
+  │     │     ├── TOCTOU re-check: digest of opened fd matches pre-verification
+  │     │     ├── On success: injects fd via SECCOMP_IOCTL_NOTIF_ADDFD
+  │     │     └── On failure: returns EPERM
+  │     └── Verified results cached per (path, inode, mtime, size)
+  │
+  └── Runtime interception (macOS)
+        ├── Seatbelt sandbox rules deny file-read-data for instruction patterns
+        ├── Pre-exec-verified files get literal allow rules that override the deny
+        └── Unverified or modified files have no allow rule → blocked by kernel
+```
+
+The agent process never observes unverified content. On Linux, the seccomp supervisor mediates every file open. On macOS, kernel-level Seatbelt rules prevent reads entirely unless the file was verified at startup.
+
+### Why this matters
+
+Without runtime enforcement, signing is advisory -- an attacker who modifies a file after it was signed can still trick the agent. nono closes this gap:
+
+- **No trust-on-first-use**: A valid signature from a trusted publisher is required on first encounter. There is no grace period.
+- **Blocklist precedence**: Known-malicious file digests are rejected regardless of whether they have a valid signature.
+- **TOCTOU protection**: On Linux, the supervisor re-verifies the file descriptor's digest after opening, preventing file swaps between verification and read.
+- **Policy self-protection**: The trust policy document itself requires a signed attestation. An attacker cannot modify `trust-policy.json` to self-authorize without a valid signature from a trusted publisher.
+
+### Verification details
+
+Keyless bundle verification confirms four things:
+
+| Check | What it proves |
+|-------|---------------|
+| Fulcio certificate chain | The certificate was issued by Sigstore's CA |
+| Rekor inclusion proof | The signature was logged in the transparency log within the certificate's validity window (10-20 minutes) |
+| ECDSA signature validity | The DSSE envelope was signed by the certificate's key |
+| OIDC claim matching | The Fulcio certificate's X.509 extensions (issuer, repository, workflow, ref) match the trust policy's publisher definition |
+
+The relevant Fulcio certificate extensions:
+
+| OID | Field |
+|-----|-------|
+| `1.3.6.1.4.1.57264.1.1` | OIDC issuer |
+| `1.3.6.1.4.1.57264.1.8` | Source repository |
+| `1.3.6.1.4.1.57264.1.9` | Repository ref |
+| `1.3.6.1.4.1.57264.1.11` | Build config (workflow URI) |
+
 ## Bundle Output Options
 
 | Option | Use Case |
