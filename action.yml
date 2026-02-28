@@ -1,5 +1,5 @@
 name: "nono-sigstore-action"
-description: "Sign AI agent instruction files (SKILLS.md,AGENT.MD) and there scripts, with Sigstore & Nono keyless attestation"
+description: "Sign AI agent instruction files (SKILLS.md, CLAUDE.md, AGENT.MD) and their scripts, with Sigstore & Nono keyless attestation"
 author: "Phase Security"
 
 branding:
@@ -79,6 +79,7 @@ runs:
       id: version
       shell: bash
       env:
+        GH_TOKEN: ${{ github.token }}
         INPUT_VERSION: ${{ inputs.version }}
       run: |
         if [ "${INPUT_VERSION}" = "latest" ]; then
