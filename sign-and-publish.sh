@@ -16,6 +16,14 @@ if [ -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ] || [ -z "${ACTIONS_ID_TOKEN_REQU
   exit 1
 fi
 
+if [ -z "${PACKAGE_NAMESPACE:-}" ]; then
+  if [ -z "${GITHUB_REPOSITORY:-}" ]; then
+    echo "ERROR: package-namespace not provided and GITHUB_REPOSITORY is unavailable" >&2
+    exit 1
+  fi
+  PACKAGE_NAMESPACE="${GITHUB_REPOSITORY%%/*}"
+fi
+
 echo "Requesting OIDC token from GitHub..."
 OIDC_TOKEN=$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
   "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=nono-registry" | jq -r '.value')

@@ -82,7 +82,6 @@ jobs:
         with:
           publish: "true"
           package-name: claude-code
-          package-namespace: always-further
           package-version: ${{ github.ref_name }}
           nono-version: latest
           package-path: .
@@ -158,7 +157,6 @@ By default, all specified files are signed together into a single `.nono-trust.b
   with:
     publish: "true"
     package-name: claude-code
-    package-namespace: always-further
     package-version: ${{ github.ref_name }}
     nono-version: latest
     package-path: .
@@ -189,7 +187,7 @@ By default, all specified files are signed together into a single `.nono-trust.b
 | `publish` | `false` | Publish a nono package version to the registry |
 | `package-version` | _(empty)_ | Registry package version for publish mode |
 | `package-name` | _(empty)_ | Registry package name for publish mode |
-| `package-namespace` | _(empty)_ | Registry namespace for publish mode |
+| `package-namespace` | _(empty)_ | Registry namespace for publish mode. Defaults to the owner of `GITHUB_REPOSITORY` |
 | `registry-url` | `https://registry.nono.sh/api/v1` | Registry API base URL for publish mode |
 | `package-path` | `.` | Package directory for publish mode |
 
