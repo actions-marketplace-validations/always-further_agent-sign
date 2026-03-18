@@ -299,4 +299,4 @@ runs:
         PACKAGE_VERSION: ${{ inputs.package-version }}
         PACKAGE_PATH: ${{ inputs.package-path }}
         REGISTRY_URL: ${{ inputs.registry-url }}
-      run: ${{ github.action_path }}/sign-and-publish.sh
+      run: bash ${{ github.action_path }}/sign-and-publish.sh
