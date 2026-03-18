@@ -34,16 +34,22 @@ if [ -z "${OIDC_TOKEN}" ] || [ "${OIDC_TOKEN}" = "null" ]; then
 fi
 
 echo "Exchanging OIDC token with registry..."
-EXCHANGE_RESPONSE=$(curl -fsS -X POST "${REGISTRY_URL}/auth/oidc/exchange" \
+EXCHANGE_STATUS=$(curl -sS -o /tmp/nono_oidc_exchange_response.json -w '%{http_code}' -X POST "${REGISTRY_URL}/auth/oidc/exchange" \
   -H "Content-Type: application/json" \
   -d "{\"token\":\"${OIDC_TOKEN}\",\"package_namespace\":\"${PACKAGE_NAMESPACE}\",\"package_name\":\"${PACKAGE_NAME}\"}")
+EXCHANGE_RESPONSE=$(cat /tmp/nono_oidc_exchange_response.json)
+rm -f /tmp/nono_oidc_exchange_response.json
+
+if [ "${EXCHANGE_STATUS}" -lt 200 ] || [ "${EXCHANGE_STATUS}" -ge 300 ]; then
+  echo "ERROR: registry token exchange failed (${EXCHANGE_STATUS}): ${EXCHANGE_RESPONSE}" >&2
+  exit 1
+fi
 
 UPLOAD_TOKEN=$(printf '%s' "${EXCHANGE_RESPONSE}" | jq -r '.upload_token')
 if [ -z "${UPLOAD_TOKEN}" ] || [ "${UPLOAD_TOKEN}" = "null" ]; then
   echo "ERROR: registry token exchange failed: ${EXCHANGE_RESPONSE}" >&2
   exit 1
 fi
-
 FILE_LIST="${RUNNER_TEMP}/nono_package_files.txt"
 if [ ! -f "${FILE_LIST}" ]; then
   echo "ERROR: file list not found at ${FILE_LIST}" >&2
