@@ -1,5 +1,5 @@
 name: "agent-sign"
-description: "Sign AI agent instruction files or publish nono packages with Sigstore and Nono keyless attestation"
+description: "Sign AI agent files or publish nono packages with Sigstore and Nono keyless attestation"
 author: "Phase Security"
 
 branding:
@@ -18,7 +18,7 @@ inputs:
   files:
     description: >
       Whitespace-separated list of files to sign.
-      If empty, uses --all to sign all instruction files matching trust policy patterns.
+      If empty, uses --all to sign all files matching trust policy includes.
       When multiple files are specified, they are signed together into a single
       multi-subject bundle (.nono-trust.bundle) for atomic verification.
     required: false
@@ -52,7 +52,7 @@ inputs:
   commit-message:
     description: "Commit message for bundle commits."
     required: false
-    default: "chore: update instruction file attestation bundles [skip ci]"
+    default: "chore: update attestation bundles [skip ci]"
   publish:
     description: "Publish a nono package version to the registry after signing."
     required: false
@@ -131,7 +131,7 @@ runs:
         echo "Installed: $(nono --version)"
         echo "::endgroup::"
 
-    - name: Sign instruction files
+    - name: Sign files
       id: sign
       shell: bash
       env:
@@ -200,7 +200,7 @@ runs:
           } >> "${GITHUB_OUTPUT}"
         elif [ -z "${INPUT_FILES}" ]; then
           # No files specified: use --all (discovers and signs all instruction files)
-          echo "Signing all instruction files (--keyless --all)"
+          echo "Signing all files (--keyless --all)"
           nono trust sign --keyless --all
         elif [ "${INPUT_PER_FILE}" = "true" ]; then
           # Per-file mode: sign each file separately
@@ -225,7 +225,7 @@ runs:
 
           if [ -n "${FILES_TO_SIGN}" ]; then
             echo "Signing files as multi-subject bundle:${FILES_TO_SIGN}"
-            nono trust sign --keyless ${FILES_TO_SIGN}
+            nono trust sign --keyless --multi-subject ${FILES_TO_SIGN}
           else
             echo "::error::No valid files to sign"
             exit 1
@@ -254,7 +254,7 @@ runs:
           POLICY_ARG="--policy ${INPUT_TRUST_POLICY}"
         fi
 
-        echo "::group::Verifying instruction file signatures"
+        echo "::group::Verifying file signatures"
         nono trust verify ${POLICY_ARG} --all
         echo "::endgroup::"
 

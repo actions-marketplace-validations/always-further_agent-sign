@@ -20,14 +20,14 @@
 
 ## Why?
 
-AI agents read instruction files to determine what they can do. If those files are tampered with, the agent follows malicious instructions. nono packages raise the stakes further by distributing profiles, hooks, trust policy, and project instructions together. This action creates a cryptographic chain of trust for both cases: instruction files can be signed in CI, and full nono packages can be signed and published with the same workflow identity.
+AI agents read instruction files to determine what they can do. If those files are tampered with, the agent follows malicious instructions. nono packages raise the stakes further by distributing profiles, hooks, trust policy, and project instructions together. This action creates a cryptographic chain of trust for both cases: files can be signed in CI, and full nono packages can be signed and published with the same workflow identity.
 
 The result is a **Sigstore bundle** containing a DSSE envelope with an in-toto statement, a Fulcio certificate (binding GitHub Actions OIDC identity to the signature), and a Rekor transparency log inclusion proof. No private keys involved — identity is derived from the CI workflow itself.
 
 ## Quick Start
 
 ```yaml
-name: Sign instruction files
+name: Sign files
 on:
   push:
     branches: [main]
@@ -47,7 +47,7 @@ jobs:
       - uses: always-further/agent-sign@v0.0.2
 ```
 
-That's it. This signs all instruction files matching nono's default patterns, commits the `.bundle` sidecars, and verifies the signatures as a smoke test.
+That's it. This signs all files matching the trust policy's `includes` patterns, commits the `.bundle` sidecars, and verifies the signatures as a smoke test.
 
 ## Package Publishing
 
@@ -99,7 +99,7 @@ If `files` is omitted in publish mode, the action recursively discovers non-hidd
 ## How It Works
 
 1. Installs the [nono CLI](https://github.com/always-further/nono) from GitHub releases
-2. Signs instruction files using `nono trust sign --keyless`
+2. Signs files using `nono trust sign --keyless`
 3. GitHub Actions OIDC provides the identity token automatically
 4. Fulcio issues a short-lived certificate binding the OIDC claims (repository, workflow, ref) to an ephemeral signing key
 5. The signature is submitted to Rekor for transparency logging
@@ -176,14 +176,14 @@ By default, all specified files are signed together into a single `.nono-trust.b
 | Input | Default | Description |
 |-------|---------|-------------|
 | `nono-version` | `latest` | nono CLI version to install |
-| `files` | _(empty)_ | Whitespace-separated list of files to sign. Empty = `--all` (matches instruction patterns) |
+| `files` | _(empty)_ | Whitespace-separated list of files to sign. Empty = `--all` (matches trust policy includes) |
 | `per-file` | `false` | Sign each file separately instead of a single multi-subject bundle |
 | `commit` | `true` | Commit bundle files back to the repository |
 | `upload-artifacts` | `false` | Upload bundle files as workflow artifacts |
 | `verify` | `true` | Run verification after signing |
 | `trust-policy` | _(empty)_ | Path to `trust-policy.json` for verification |
 | `working-directory` | `.` | Working directory for signing |
-| `commit-message` | `chore: update instruction file attestation bundles [skip ci]` | Commit message |
+| `commit-message` | `chore: update attestation bundles [skip ci]` | Commit message |
 | `publish` | `false` | Publish a nono package version to the registry |
 | `package-version` | _(empty)_ | Registry package version for publish mode |
 | `package-name` | _(empty)_ | Registry package name for publish mode |
@@ -216,7 +216,7 @@ Consumers verify bundles using a `trust-policy.json` that defines trusted publis
 ```json
 {
   "version": 1,
-  "instruction_patterns": ["SKILLS*", "CLAUDE*", "AGENT*", ".claude/**/*.md"],
+  "includes": ["SKILLS*", "CLAUDE*", "AGENT*", ".claude/**/*.md"],
   "publishers": [
     {
       "name": "my-org CI",
@@ -237,7 +237,7 @@ Verify locally:
 nono trust verify --policy trust-policy.json --all
 ```
 
-Or enforce at runtime — nono's pre-exec scan verifies all instruction files before the agent can read them:
+Or enforce at runtime — nono's pre-exec scan verifies all files matching the trust policy before the agent can read them:
 
 ```bash
 nono run --profile claude-code -- claude
@@ -261,7 +261,7 @@ For keyless signing (the default in CI), the signer identity is extracted from t
 
 ### What happens at runtime
 
-When an agent is launched through nono, the sandbox enforces attestation before the agent can read any instruction file:
+When an agent is launched through nono, the sandbox enforces attestation before the agent can read any file matching the trust policy:
 
 <p align="center">
   <img src="assets/attest-arch2.png" alt="Runtime verification flow" width="600">
@@ -308,7 +308,7 @@ The relevant Fulcio certificate extensions:
 
 ## Companion Artifacts
 
-SKILL files often reference companion artifacts (scripts, configs, data files). Use multi-subject signing to attest them together:
+Instruction files often reference companion artifacts (scripts, configs, data files). Use multi-subject signing to attest them together:
 
 ```yaml
 - uses: always-further/agent-sign@v0.0.2
